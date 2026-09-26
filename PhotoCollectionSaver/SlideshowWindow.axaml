@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PhotoCollectionSaver.SlideshowWindow"
+        Title="Photo Collection Saver"
+        Background="Black"
+        WindowStartupLocation="Manual">
+    <Panel>
+        <TransitioningContentControl x:Name="Slide">
+            <TransitioningContentControl.PageTransition>
+                <CrossFade Duration="0:0:1" />
+            </TransitioningContentControl.PageTransition>
+        </TransitioningContentControl>
+
+        <TextBlock x:Name="Message"
+                   IsVisible="False"
+                   Foreground="Gray"
+                   FontSize="20"
+                   Margin="40"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" />
+    </Panel>
+</Window>

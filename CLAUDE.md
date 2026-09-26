@@ -4,33 +4,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-A Windows screensaver, written as a C# WinForms app on **.NET Framework 4.5.2** (old-style, non-SDK `.csproj`). It shows photos from a folder on every connected monitor. The project is at an early stage: only full-screen mode works, and the other modes are stubs.
+A photo slideshow screensaver for Windows and macOS, built with **.NET 10 + Avalonia 12**. On Windows it is a real screensaver (`.scr`). On macOS it is a full-screen app you launch yourself, because a real macOS screensaver has to be a native `.saver` bundle, which .NET can't produce.
 
 ## Build and run
 
-This is a Windows-only project (it uses `System.Windows.Forms` and `System.Drawing` on .NET Framework). It will not build or run on macOS with the standard `dotnet` CLI. Build it on Windows with Visual Studio or MSBuild:
+The .NET 10 SDK is installed at `/usr/local/share/dotnet`, via `brew install --cask dotnet-sdk`. It may not be on `PATH` in a non-login shell.
 
 ```bash
-msbuild PhotoCollectionSaver.sln /p:Configuration=Release
+dotnet build PhotoCollectionSaver.sln
+dotnet run --project PhotoCollectionSaver          # macOS: no args starts the slideshow
+dotnet run --project PhotoCollectionSaver -- /s    # Windows-style "show" mode
+dotnet publish PhotoCollectionSaver/PhotoCollectionSaver.csproj -c Release -r win-x64
 ```
 
-The output is `PhotoCollectionSaver/bin/<Configuration>/PhotoCollectionSaver.exe`. To install it as a screensaver, rename the `.exe` to `.scr`. You can also run it directly with a screensaver argument, such as `PhotoCollectionSaver.exe /s`.
+The Windows publish works from macOS. It produces a self-contained single-file `PhotoCollectionSaver.exe` plus a copy named `PhotoCollectionSaver.scr` in `bin/Release/net10.0/win-x64/publish/`. The copy comes from the `CopyAsScreensaver` target in the csproj.
 
-There are no tests and no lint configuration.
+There are no tests and no lint configuration. Running the app takes over the whole screen. Any key press, click, or mouse movement of more than 5px quits it.
 
 ## Architecture
 
-- **`Program.cs`**: the entry point. It parses the standard Windows screensaver arguments, which can be either `/s` or `/c:1234` (the colon form carries a window handle):
-  - `/s`: full-screen mode. This is the only mode that is implemented.
-  - `/p <hwnd>`: preview mode. Still a TODO.
-  - `/c` or no arguments: configuration mode. Still a TODO.
+- **`Program.cs`** parses the Windows screensaver arguments: `/s` (show), `/p <hwnd>` (preview), and `/c` or `/c:<hwnd>` (configure). Arguments are case-insensitive, and `-` works as well as `/`. With no arguments, the app configures on Windows but shows the slideshow on macOS. Only show mode is implemented; preview and configure are TODOs.
+- **`App.axaml.cs`** opens one `SlideshowWindow` per screen. Avalonia only exposes `Screens` through a window, so the first window is created before any screen is known.
+- **`SlideshowWindow`** is a full-screen, cursorless window that cross-fades (`TransitioningContentControl`) to the next photo every 10s. Photos are decoded off the UI thread at the window's pixel height (`Bounds.Height * RenderScaling`). Only the current and previous bitmaps stay alive.
+  - Pointer movement is ignored for 1s after the window opens, because going full screen can move the window under a stationary cursor.
+  - `Topmost` is only set on Windows. On macOS a topmost window can't go full screen.
+- **`PhotoLibrary`** holds the top-level photos in one folder and hands them out in shuffled order. All windows share one instance, so each monitor shows different photos. For now the folder is the OS Pictures folder, which will be replaced by settings. Skia can't decode HEIC.
 
-  `/s` loads the image list and opens one `ScreenSaverForm` per `Screen.AllScreens` entry. It then calls `Application.Run()` without a main form, so the app lives until a form calls `Application.Exit()`.
-- **`getImagesList()`**: reads `.jpg` files from a **hardcoded path** (`D:\Users\Marcus\Pictures\...`) and loads each one as a `Bitmap` to record its dimensions. Moving this path into configuration is still an open task. `Properties/Settings.settings` exists but is empty.
-- **`ScreenSaverForm`**: a borderless, black, topmost form that hides the cursor. It exits on any key press, mouse click, or mouse movement of more than 5px. Images are currently drawn with `CreateGraphics()` from `Program.ShowScreenSaver`, which does not persist across repaints. The `pictureBox1` control in the designer is not used yet.
-- **`Helper.cs`**: holds `MarcusImage`, a simple DTO with the image path, width, and height.
+## Platform quirks (observed on macOS)
 
-## Conventions
-
-- New `.cs` files must be added to the `<Compile Include=...>` list in `PhotoCollectionSaver.csproj`. Old-style projects do not pick up files automatically.
-- `*.Designer.cs` files are generated by the WinForms designer. Keep hand-written logic in the non-designer partial class.
+- `Screen.Bounds` is in points, and `Screen.Scaling` reports 1 even on Retina. Use the window's `RenderScaling` for pixel sizes.
+- On notched MacBooks, full-screen windows sit below the menu bar area. For example, the window is 1710×1073 at y=34 on a 1710×1107 screen.
+- `Environment.SpecialFolder.MyPictures` ignores `$HOME` on macOS, so you can't redirect it for testing by overriding `HOME`.

@@ -1,105 +1,56 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Windows.Forms;
+using Avalonia;
 
-namespace PhotoCollectionSaver
+namespace PhotoCollectionSaver;
+
+internal enum LaunchMode { Show, Preview, Configure, Unknown }
+
+internal static class Program
 {
-    static class Program
+    [STAThread]
+    public static int Main(string[] args)
     {
-        /// <summary>
-        /// The main entry point for the application.
-        /// </summary>
-        [STAThread]
-        static void Main(string[] args)
+        switch (ParseMode(args))
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            
-            if (args.Length > 0)
-            {
-                string firstArgument = args[0].ToLower().Trim();
-                string secondArgument = null;
+            case LaunchMode.Show:
+                return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
-                // Handle cases where arguments are separated by colon.
-                // Examples: /c:1234567 or /P:1234567
-                if (firstArgument.Length > 2)
-                {
-                    secondArgument = firstArgument.Substring(3).Trim();
-                    firstArgument = firstArgument.Substring(0, 2);
-                }
-                else if (args.Length > 1)
-                    secondArgument = args[1];
+            case LaunchMode.Preview:
+                // TODO: draw into the Windows preview box (its window handle is in the arguments).
+                return 0;
 
-                if (firstArgument == "/c")           // Configuration mode
-                {
-                    // TODO
-                }
-                else if (firstArgument == "/p")      // Preview mode
-                {
-                    // TODO
-                }
-                else if (firstArgument == "/s")      // Full-screen mode
-                {
-                    List<MarcusImage> images = getImagesList();
-                    ShowScreenSaver(images);
-                    Application.Run();
-                }
-                else    // Undefined argument
-                {
-                    MessageBox.Show("Sorry, but the command line argument \"" + firstArgument +
-                        "\" is not valid.", "ScreenSaver",
-                        MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
-                }
-            }
-            else    // No arguments - treat like /c
-            {
-                // TODO
-            }
+            case LaunchMode.Configure:
+                // TODO: settings window.
+                return 0;
 
+            default:
+                return 1;
         }
-
-        static void ShowScreenSaver(List<MarcusImage> images)
-        {
-            foreach (Screen screen in Screen.AllScreens)
-            {
-                ScreenSaverForm screensaver = new ScreenSaverForm(screen.Bounds);
-                screensaver.Show();
-
-                var mew = screensaver.CreateGraphics();
-
-                Bitmap do1 = new Bitmap(images[0].filepath);
-                mew.DrawImage(do1,1,1);
-                
-                
-            }
-        }
-
-        static List<MarcusImage> getImagesList()
-        {
-            List<MarcusImage> retimages = new List<MarcusImage>();
-
-            string mypath = @"D:\Users\Marcus\Pictures\Guys\mattrush";
-
-            foreach(var filename in Directory.EnumerateFiles(mypath))
-            {
-                if (Path.GetExtension(filename).ToLower() == ".jpg")
-                {
-                    Bitmap img = new Bitmap(filename);
-                    retimages.Add(new MarcusImage { filepath = filename, width = img.Width, height = img.Height });
-                    img.Dispose();
-                }
-            }
-
-            return retimages;
-        }
-
     }
 
-    
+    // Used by the Avalonia designer as well as Main.
+    public static AppBuilder BuildAvaloniaApp() =>
+        AppBuilder.Configure<App>()
+            .UsePlatformDetect()
+            .LogToTrace();
 
-    
+    // Windows launches screensavers with /s (show), /p <hwnd> (preview) or /c (configure),
+    // in any case and optionally as /c:<hwnd>. No arguments means "configure".
+    // macOS has no screensaver host for this app, so no arguments starts the slideshow there.
+    internal static LaunchMode ParseMode(string[] args)
+    {
+        if (args.Length == 0)
+            return OperatingSystem.IsWindows() ? LaunchMode.Configure : LaunchMode.Show;
+
+        string arg = args[0].Trim().ToLowerInvariant();
+        if (arg.Length < 2 || (arg[0] != '/' && arg[0] != '-') || (arg.Length > 2 && arg[2] != ':'))
+            return LaunchMode.Unknown;
+
+        return arg[1] switch
+        {
+            's' => LaunchMode.Show,
+            'p' => LaunchMode.Preview,
+            'c' => LaunchMode.Configure,
+            _ => LaunchMode.Unknown,
+        };
+    }
 }
